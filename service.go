@@ -477,6 +477,111 @@ func (s *Service) SaveTableRows(ctx context.Context, articleID uint, rowsData []
 	return s.tableRowRepo.ReplaceAll(ctx, articleID, rows)
 }
 
+// ==================== Markdown文章操作 ====================
+
+// CreateMarkdownArticleInput 创建Markdown文章输入
+type CreateMarkdownArticleInput struct {
+	Title     string
+	OwnerID   uint
+	OwnerType string
+	Content   string
+}
+
+// CreateMarkdownArticle 创建Markdown文章
+func (s *Service) CreateMarkdownArticle(ctx context.Context, input *CreateMarkdownArticleInput) (*model.Article, error) {
+	// 1. 创建主表
+	article, err := s.CreateArticle(ctx, &CreateArticleInput{
+		Title:       input.Title,
+		ArticleType: model.ArticleTypeMarkdown,
+		OwnerID:     input.OwnerID,
+		OwnerType:   input.OwnerType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 创建Markdown内容
+	markdown := &model.MarkdownArticle{
+		ArticleID:     article.ID,
+		Content:       input.Content,
+		HTMLContent:   "", // 可选：在此处或前端渲染HTML
+		FormatVersion: "1.0",
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	if err := s.markdownRepo.Create(ctx, markdown); err != nil {
+		s.logger.ErrorCtx(ctx, "创建Markdown内容失败", zap.Error(err))
+		return nil, ErrDatabaseError.Wrap(err)
+	}
+
+	return article, nil
+}
+
+// MarkdownArticleContent Markdown文章完整内容
+type MarkdownArticleContent struct {
+	Article *model.Article `json:"article"`
+	Content string         `json:"content"`
+}
+
+// GetMarkdownArticleContent 获取Markdown文章内容
+func (s *Service) GetMarkdownArticleContent(ctx context.Context, articleID uint) (*MarkdownArticleContent, error) {
+	article, err := s.GetArticle(ctx, articleID)
+	if err != nil {
+		return nil, err
+	}
+
+	if article.ArticleType != model.ArticleTypeMarkdown {
+		return nil, ErrBadRequest.WithMsg("该文章不是Markdown类型")
+	}
+
+	markdown, err := s.markdownRepo.FindByArticleID(ctx, articleID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &MarkdownArticleContent{Article: article, Content: ""}, nil
+		}
+		return nil, ErrDatabaseError.Wrap(err)
+	}
+
+	return &MarkdownArticleContent{
+		Article: article,
+		Content: markdown.Content,
+	}, nil
+}
+
+// UpdateMarkdownContent 更新Markdown内容
+func (s *Service) UpdateMarkdownContent(ctx context.Context, articleID uint, content string) error {
+	article, err := s.GetArticle(ctx, articleID)
+	if err != nil {
+		return err
+	}
+
+	if article.ArticleType != model.ArticleTypeMarkdown {
+		return ErrBadRequest.WithMsg("该文章不是Markdown类型")
+	}
+
+	markdown, err := s.markdownRepo.FindByArticleID(ctx, articleID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 不存在则创建
+			markdown = &model.MarkdownArticle{
+				ArticleID:     articleID,
+				Content:       content,
+				HTMLContent:   "",
+				FormatVersion: "1.0",
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
+			}
+			return s.markdownRepo.Create(ctx, markdown)
+		}
+		return ErrDatabaseError.Wrap(err)
+	}
+
+	markdown.Content = content
+	markdown.UpdatedAt = time.Now()
+	return s.markdownRepo.Update(ctx, markdown)
+}
+
 // ==================== 辅助函数 ====================
 
 func isValidArticleType(t string) bool {
