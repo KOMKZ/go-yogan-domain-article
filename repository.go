@@ -13,6 +13,8 @@ type ArticleRepository interface {
 	FindByID(ctx context.Context, id uint) (*model.Article, error)
 	Delete(ctx context.Context, id uint) error
 	Paginate(ctx context.Context, page, pageSize int, ownerId *uint, ownerType, articleType, title string, folderID *uint) ([]model.Article, int64, error)
+	// PaginateByFolderIDs 分页查询（支持多个文件夹ID，用于树形筛选）
+	PaginateByFolderIDs(ctx context.Context, page, pageSize int, ownerId *uint, ownerType, articleType, title string, folderIDs []uint) ([]model.Article, int64, error)
 	CountByFolderID(ctx context.Context, folderID uint) (int64, error)
 	FindByFolderID(ctx context.Context, folderID uint) ([]model.Article, error)
 }

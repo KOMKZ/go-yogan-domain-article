@@ -71,6 +71,42 @@ func (r *ArticleGORMRepository) Paginate(ctx context.Context, page, pageSize int
 	return articles, total, nil
 }
 
+// PaginateByFolderIDs 分页查询（支持多个文件夹ID，用于树形筛选）
+func (r *ArticleGORMRepository) PaginateByFolderIDs(ctx context.Context, page, pageSize int, ownerId *uint, ownerType, articleType, title string, folderIDs []uint) ([]model.Article, int64, error) {
+	var articles []model.Article
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&model.Article{}).Where("status != ?", model.StatusDeleted)
+
+	if ownerId != nil {
+		query = query.Where("owner_id = ?", *ownerId)
+	}
+	if ownerType != "" {
+		query = query.Where("owner_type = ?", ownerType)
+	}
+	if articleType != "" {
+		query = query.Where("article_type = ?", articleType)
+	}
+	if title != "" {
+		query = query.Where("title LIKE ?", "%"+title+"%")
+	}
+	// 使用 IN 查询多个文件夹
+	if len(folderIDs) > 0 {
+		query = query.Where("folder_id IN ?", folderIDs)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * pageSize
+	if err := query.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&articles).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return articles, total, nil
+}
+
 func (r *ArticleGORMRepository) CountByFolderID(ctx context.Context, folderID uint) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&model.Article{}).
