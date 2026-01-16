@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/KOMKZ/go-yogan-domain-article/model"
+	"github.com/KOMKZ/go-yogan-framework/event"
 	"github.com/KOMKZ/go-yogan-framework/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -19,6 +20,17 @@ type Service struct {
 	tableRepo    TableArticleRepository
 	tableRowRepo TableArticleRowRepository
 	logger       *logger.CtxZapLogger
+	dispatcher   event.Dispatcher // 事件分发器（可选）
+}
+
+// ServiceOption 服务配置选项
+type ServiceOption func(*Service)
+
+// WithDispatcher 注入事件分发器
+func WithDispatcher(d event.Dispatcher) ServiceOption {
+	return func(s *Service) {
+		s.dispatcher = d
+	}
 }
 
 // NewService 创建文章服务
@@ -29,8 +41,9 @@ func NewService(
 	tableRepo TableArticleRepository,
 	tableRowRepo TableArticleRowRepository,
 	log *logger.CtxZapLogger,
+	opts ...ServiceOption,
 ) *Service {
-	return &Service{
+	s := &Service{
 		articleRepo:  articleRepo,
 		markdownRepo: markdownRepo,
 		richTextRepo: richTextRepo,
@@ -38,6 +51,10 @@ func NewService(
 		tableRowRepo: tableRowRepo,
 		logger:       log,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // ==================== 通用文章操作 ====================
@@ -75,6 +92,10 @@ func (s *Service) CreateArticle(ctx context.Context, input *CreateArticleInput) 
 	}
 
 	s.logger.InfoCtx(ctx, "文章创建成功", zap.Uint("article_id", article.ID))
+
+	// 发布文章创建事件
+	s.dispatchAsync(ctx, NewArticleCreatedEvent(article.ID, article.FolderID))
+
 	return article, nil
 }
 
@@ -131,10 +152,11 @@ func (s *Service) UpdateArticle(ctx context.Context, id uint, input *UpdateArtic
 
 // DeleteArticle 删除文章（软删除）
 func (s *Service) DeleteArticle(ctx context.Context, id uint) error {
-	_, err := s.GetArticle(ctx, id)
+	article, err := s.GetArticle(ctx, id)
 	if err != nil {
 		return err
 	}
+	folderID := article.FolderID // 保存删除前的 folderID
 
 	if err := s.articleRepo.Delete(ctx, id); err != nil {
 		s.logger.ErrorCtx(ctx, "删除文章失败", zap.Uint("article_id", id), zap.Error(err))
@@ -142,6 +164,10 @@ func (s *Service) DeleteArticle(ctx context.Context, id uint) error {
 	}
 
 	s.logger.InfoCtx(ctx, "文章删除成功", zap.Uint("article_id", id))
+
+	// 发布文章删除事件
+	s.dispatchAsync(ctx, NewArticleDeletedEvent(id, folderID))
+
 	return nil
 }
 
@@ -629,6 +655,7 @@ func (s *Service) MoveToFolder(ctx context.Context, articleID uint, folderID *ui
 	if err != nil {
 		return err
 	}
+	oldFolderID := article.FolderID // 保存移动前的 folderID
 
 	article.FolderID = folderID
 	article.UpdatedAt = time.Now()
@@ -639,7 +666,31 @@ func (s *Service) MoveToFolder(ctx context.Context, articleID uint, folderID *ui
 	}
 
 	s.logger.InfoCtx(ctx, "文章移动成功", zap.Uint("article_id", articleID), zap.Uintp("folder_id", folderID))
+
+	// 发布文章移动事件（如果 folderID 有变化）
+	if !equalFolderID(oldFolderID, folderID) {
+		s.dispatchAsync(ctx, NewArticleMovedEvent(articleID, oldFolderID, folderID))
+	}
+
 	return nil
+}
+
+// equalFolderID 比较两个 FolderID 是否相等
+func equalFolderID(a, b *uint) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+// dispatchAsync 异步发布事件（如果有 dispatcher）
+func (s *Service) dispatchAsync(ctx context.Context, e event.Event) {
+	if s.dispatcher != nil {
+		s.dispatcher.DispatchAsync(ctx, e)
+	}
 }
 
 // CountByFolder 统计指定文件夹下的文章数量
