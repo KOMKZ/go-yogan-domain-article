@@ -12,7 +12,9 @@ type ArticleRepository interface {
 	Update(ctx context.Context, article *model.Article) error
 	FindByID(ctx context.Context, id uint) (*model.Article, error)
 	Delete(ctx context.Context, id uint) error
-	Paginate(ctx context.Context, page, pageSize int, ownerId *uint, ownerType, articleType, title string) ([]model.Article, int64, error)
+	Paginate(ctx context.Context, page, pageSize int, ownerId *uint, ownerType, articleType, title string, folderID *uint) ([]model.Article, int64, error)
+	CountByFolderID(ctx context.Context, folderID uint) (int64, error)
+	FindByFolderID(ctx context.Context, folderID uint) ([]model.Article, error)
 }
 
 // MarkdownArticleRepository Markdown文章仓储接口

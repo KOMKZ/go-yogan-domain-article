@@ -7,6 +7,7 @@ type Article struct {
 	ID          uint      `gorm:"primarykey" json:"id"`
 	Title       string    `gorm:"size:255;not null" json:"title"`
 	ArticleType string    `gorm:"size:50;not null;index" json:"articleType"` // table, markdown, rich_text
+	FolderID    *uint     `gorm:"index" json:"folderId"`                     // 文件夹ID（可空）
 	OwnerID     uint      `gorm:"not null" json:"ownerId"`
 	OwnerType   string    `gorm:"size:50;not null;index" json:"ownerType"` // user, admin, team
 	Status      int       `gorm:"not null;default:1;index" json:"status"`  // 0=草稿, 1=已发布, 2=已删除

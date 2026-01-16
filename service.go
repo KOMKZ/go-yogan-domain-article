@@ -46,6 +46,7 @@ func NewService(
 type CreateArticleInput struct {
 	Title       string
 	ArticleType string
+	FolderID    *uint
 	OwnerID     uint
 	OwnerType   string
 }
@@ -60,6 +61,7 @@ func (s *Service) CreateArticle(ctx context.Context, input *CreateArticleInput) 
 	article := &model.Article{
 		Title:       input.Title,
 		ArticleType: input.ArticleType,
+		FolderID:    input.FolderID,
 		OwnerID:     input.OwnerID,
 		OwnerType:   input.OwnerType,
 		Status:      model.StatusPublished,
@@ -95,8 +97,9 @@ func (s *Service) GetArticle(ctx context.Context, id uint) (*model.Article, erro
 
 // UpdateArticleInput 更新文章输入
 type UpdateArticleInput struct {
-	Title  *string
-	Status *int
+	Title    *string
+	Status   *int
+	FolderID **uint // 二级指针：nil=不更新, *nil=清空, *value=设置新值
 }
 
 // UpdateArticle 更新文章
@@ -111,6 +114,9 @@ func (s *Service) UpdateArticle(ctx context.Context, id uint, input *UpdateArtic
 	}
 	if input.Status != nil {
 		article.Status = *input.Status
+	}
+	if input.FolderID != nil {
+		article.FolderID = *input.FolderID
 	}
 	article.UpdatedAt = time.Now()
 
@@ -153,8 +159,8 @@ type PageResult struct {
 }
 
 // ListArticles 分页查询文章
-func (s *Service) ListArticles(ctx context.Context, page, size int, ownerId *uint, ownerType, articleType, title string) (*PageResult, error) {
-	articles, total, err := s.articleRepo.Paginate(ctx, page, size, ownerId, ownerType, articleType, title)
+func (s *Service) ListArticles(ctx context.Context, page, size int, ownerId *uint, ownerType, articleType, title string, folderID *uint) (*PageResult, error) {
+	articles, total, err := s.articleRepo.Paginate(ctx, page, size, ownerId, ownerType, articleType, title, folderID)
 	if err != nil {
 		s.logger.ErrorCtx(ctx, "查询文章列表失败", zap.Error(err))
 		return nil, ErrDatabaseError.Wrap(err)
@@ -183,6 +189,7 @@ func (s *Service) ListArticles(ctx context.Context, page, size int, ownerId *uin
 // CreateRichTextArticleInput 创建富文本文章输入
 type CreateRichTextArticleInput struct {
 	Title     string
+	FolderID  *uint
 	OwnerID   uint
 	OwnerType string
 	Content   string
@@ -194,6 +201,7 @@ func (s *Service) CreateRichTextArticle(ctx context.Context, input *CreateRichTe
 	article, err := s.CreateArticle(ctx, &CreateArticleInput{
 		Title:       input.Title,
 		ArticleType: model.ArticleTypeRichText,
+		FolderID:    input.FolderID,
 		OwnerID:     input.OwnerID,
 		OwnerType:   input.OwnerType,
 	})
@@ -287,6 +295,7 @@ func (s *Service) UpdateRichTextContent(ctx context.Context, articleID uint, con
 type CreateTableArticleInput struct {
 	Title       string
 	TableID     string
+	FolderID    *uint
 	OwnerID     uint
 	OwnerType   string
 	Structure   []map[string]interface{}
@@ -301,6 +310,7 @@ func (s *Service) CreateTableArticle(ctx context.Context, input *CreateTableArti
 	article, err := s.CreateArticle(ctx, &CreateArticleInput{
 		Title:       input.Title,
 		ArticleType: model.ArticleTypeTable,
+		FolderID:    input.FolderID,
 		OwnerID:     input.OwnerID,
 		OwnerType:   input.OwnerType,
 	})
@@ -482,6 +492,7 @@ func (s *Service) SaveTableRows(ctx context.Context, articleID uint, rowsData []
 // CreateMarkdownArticleInput 创建Markdown文章输入
 type CreateMarkdownArticleInput struct {
 	Title     string
+	FolderID  *uint
 	OwnerID   uint
 	OwnerType string
 	Content   string
@@ -493,6 +504,7 @@ func (s *Service) CreateMarkdownArticle(ctx context.Context, input *CreateMarkdo
 	article, err := s.CreateArticle(ctx, &CreateArticleInput{
 		Title:       input.Title,
 		ArticleType: model.ArticleTypeMarkdown,
+		FolderID:    input.FolderID,
 		OwnerID:     input.OwnerID,
 		OwnerType:   input.OwnerType,
 	})
@@ -580,6 +592,38 @@ func (s *Service) UpdateMarkdownContent(ctx context.Context, articleID uint, con
 	markdown.Content = content
 	markdown.UpdatedAt = time.Now()
 	return s.markdownRepo.Update(ctx, markdown)
+}
+
+// ==================== 文件夹相关操作 ====================
+
+// MoveToFolder 移动文章到指定文件夹
+// 注意：folder 有效性验证由应用层/聚合层负责
+func (s *Service) MoveToFolder(ctx context.Context, articleID uint, folderID *uint) error {
+	article, err := s.GetArticle(ctx, articleID)
+	if err != nil {
+		return err
+	}
+
+	article.FolderID = folderID
+	article.UpdatedAt = time.Now()
+
+	if err := s.articleRepo.Update(ctx, article); err != nil {
+		s.logger.ErrorCtx(ctx, "移动文章到文件夹失败", zap.Uint("article_id", articleID), zap.Error(err))
+		return ErrDatabaseError.Wrap(err)
+	}
+
+	s.logger.InfoCtx(ctx, "文章移动成功", zap.Uint("article_id", articleID), zap.Uintp("folder_id", folderID))
+	return nil
+}
+
+// CountByFolder 统计指定文件夹下的文章数量
+func (s *Service) CountByFolder(ctx context.Context, folderID uint) (int64, error) {
+	return s.articleRepo.CountByFolderID(ctx, folderID)
+}
+
+// ListByFolder 获取指定文件夹下的文章
+func (s *Service) ListByFolder(ctx context.Context, folderID uint) ([]model.Article, error) {
+	return s.articleRepo.FindByFolderID(ctx, folderID)
 }
 
 // ==================== 辅助函数 ====================

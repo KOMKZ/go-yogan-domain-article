@@ -37,7 +37,7 @@ func (r *ArticleGORMRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Model(&model.Article{}).Where("id = ?", id).Update("status", model.StatusDeleted).Error
 }
 
-func (r *ArticleGORMRepository) Paginate(ctx context.Context, page, pageSize int, ownerId *uint, ownerType, articleType, title string) ([]model.Article, int64, error) {
+func (r *ArticleGORMRepository) Paginate(ctx context.Context, page, pageSize int, ownerId *uint, ownerType, articleType, title string, folderID *uint) ([]model.Article, int64, error) {
 	var articles []model.Article
 	var total int64
 
@@ -55,6 +55,9 @@ func (r *ArticleGORMRepository) Paginate(ctx context.Context, page, pageSize int
 	if title != "" {
 		query = query.Where("title LIKE ?", "%"+title+"%")
 	}
+	if folderID != nil {
+		query = query.Where("folder_id = ?", *folderID)
+	}
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -66,6 +69,23 @@ func (r *ArticleGORMRepository) Paginate(ctx context.Context, page, pageSize int
 	}
 
 	return articles, total, nil
+}
+
+func (r *ArticleGORMRepository) CountByFolderID(ctx context.Context, folderID uint) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.Article{}).
+		Where("folder_id = ? AND status != ?", folderID, model.StatusDeleted).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *ArticleGORMRepository) FindByFolderID(ctx context.Context, folderID uint) ([]model.Article, error) {
+	var articles []model.Article
+	err := r.db.WithContext(ctx).
+		Where("folder_id = ? AND status != ?", folderID, model.StatusDeleted).
+		Order("created_at DESC").
+		Find(&articles).Error
+	return articles, err
 }
 
 // MarkdownArticleGORMRepository GORM Markdown文章仓储实现
