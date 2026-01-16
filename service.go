@@ -184,6 +184,32 @@ func (s *Service) ListArticles(ctx context.Context, page, size int, ownerId *uin
 	}, nil
 }
 
+// ListArticlesByFolderIDs 分页查询文章（支持多个文件夹ID，用于树形筛选）
+func (s *Service) ListArticlesByFolderIDs(ctx context.Context, page, size int, ownerId *uint, ownerType, articleType, title string, folderIDs []uint) (*PageResult, error) {
+	articles, total, err := s.articleRepo.PaginateByFolderIDs(ctx, page, size, ownerId, ownerType, articleType, title, folderIDs)
+	if err != nil {
+		s.logger.ErrorCtx(ctx, "查询文章列表失败", zap.Error(err))
+		return nil, ErrDatabaseError.Wrap(err)
+	}
+
+	pages := int(total) / size
+	if int(total)%size > 0 {
+		pages++
+	}
+
+	return &PageResult{
+		Records:     articles,
+		Total:       total,
+		Size:        size,
+		Current:     page,
+		Pages:       pages,
+		HasPrevious: page > 1,
+		HasNext:     page < pages,
+		IsFirst:     page == 1,
+		IsLast:      page >= pages,
+	}, nil
+}
+
 // ==================== 富文本文章操作 ====================
 
 // CreateRichTextArticleInput 创建富文本文章输入
