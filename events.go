@@ -1,6 +1,15 @@
 package article
 
-import "github.com/KOMKZ/go-yogan-framework/event"
+import (
+	"github.com/KOMKZ/go-yogan-framework/cache"
+	"github.com/KOMKZ/go-yogan-framework/event"
+)
+
+// 编译时接口断言：确保事件实现 CacheInvalidator 接口
+var (
+	_ cache.CacheInvalidator = (*ArticleDeletedEvent)(nil)
+	_ cache.CacheInvalidator = (*ArticleContentUpdatedEvent)(nil)
+)
 
 // 事件名称常量
 const (
