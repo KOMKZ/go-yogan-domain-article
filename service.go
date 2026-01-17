@@ -643,7 +643,13 @@ func (s *Service) UpdateMarkdownContent(ctx context.Context, articleID uint, con
 
 	markdown.Content = content
 	markdown.UpdatedAt = time.Now()
-	return s.markdownRepo.Update(ctx, markdown)
+	if err := s.markdownRepo.Update(ctx, markdown); err != nil {
+		return err
+	}
+
+	// 发布内容更新事件（用于缓存失效）
+	s.dispatchAsync(ctx, NewArticleContentUpdatedEvent(articleID, "markdown"))
+	return nil
 }
 
 // ==================== 文件夹相关操作 ====================
