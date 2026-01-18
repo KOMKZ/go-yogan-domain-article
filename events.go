@@ -13,10 +13,10 @@ var (
 
 // 事件名称常量
 const (
-	EventArticleCreated        = "article.created"
-	EventArticleDeleted        = "article.deleted"
-	EventArticleMoved          = "article.moved"
-	EventArticleContentUpdated = "article.content.updated"
+	EventArticleCreated        = "article:created"
+	EventArticleDeleted        = "article:deleted"
+	EventArticleMoved          = "article:moved"
+	EventArticleContentUpdated = "article:content:updated"
 )
 
 // ArticleCreatedEvent 文章创建事件
