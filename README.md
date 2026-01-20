@@ -35,7 +35,7 @@ import (
 
 // 初始化
 func InitArticleService(db *gorm.DB) *article.Service {
-    log := logger.GetLogger("article")
+    log := logger.GetLogger("yogan")
     return article.NewService(
         article.NewArticleGORMRepository(db),
         article.NewMarkdownArticleGORMRepository(db),
